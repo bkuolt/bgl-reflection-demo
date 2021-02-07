@@ -1,7 +1,7 @@
-![Screenshot](screenshot.png)
+![Screenshot](bin/screenshot.png)
 
 # Note
-⚠️ Please note that is some very old and bad code ⚠️
+⚠️ This is very old and bad code from my school days. ⚠️
 
 # Features
 - planar shadows
