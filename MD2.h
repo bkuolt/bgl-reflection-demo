@@ -2,7 +2,7 @@
 #ifndef MD2_H_
 #define MD2_H_
 
-#include "header.h"
+#include "FileHeader.h"
 #include "IL/ILUT.h"
 
 #include <algorithm>

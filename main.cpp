@@ -1,36 +1,67 @@
 // Copyright 2020
-//#include "Windows.h"  // TODO
-#include <GL/glut.h>
 
-#include <stdlib.h>
+#include <GL/glut.h>
+#include <cstdlib>
 #include "MD2.h"
 
+namespace {
+
+// forward declarations
+void resize(int width, int height);
+void key(unsigned char key, int x, int y);
+void idle(void);
+void display(void);
+
+MD2 *file;
+
+}  //
+
+int main(int argc, char *argv[]) {
+    glutInit(&argc, argv);
+    glutInitWindowSize(640, 480);  // TODO(bkuolt): increase resolution
+    glutInitWindowPosition(10, 10);
+    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
+    glutEnterGameMode();
+
+    glutReshapeFunc(resize);
+    glutDisplayFunc(display);
+    glutKeyboardFunc(key);
+    glutIdleFunc(idle);
+
+    glClearColor(0, 0, 0, 1);
+    glutFullScreen();
+    glutSetCursor(GLUT_CURSOR_NONE);
+    glEnable(GL_DEPTH_TEST);
+
+    printf("Laedt MD2-Modell...\n");
+    file = new MD2(GetPath("ogros.md2"));
+    file->start(0, 10);
+    glEnable(GL_DEPTH_TEST);
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glShadeModel(GL_FLAT);
+    glClearStencil(0x00);
+    glutMainLoop();
+    delete file;
+
+    return EXIT_SUCCESS;
+}
+
+/*
+------------------------------------------------
+-                  Details                     -
+------------------------------------------------ */
 
 #define M_PI 3.14159265358979323846
 
-f
-
 namespace {
-war/sdsd.sdsds
 
-GLuint LoadTexture(char *filename) {
-    ilutInit();
-    const GLuint texture {ilutGLLoadImage(filename) };
-    // TODO(bkuolt): error handling
-
-    glBindTexture(GL_TEXTURE_2D, texture);
-    ilutGLBuildMipmaps();
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    return texture;
-}
-
+struct {
+    int width, height;
+    float ar;
+    double a;
+} App;
 
 // forward declarations
 void DrawMirroredRoom(void);
@@ -41,23 +72,20 @@ void DrawMirror(void);
 void DrawRoom(void);
 void DrawPattern(void);
 
-MD2 *file;
-int width, height;
-float ar;
-double a;
-
-
 void resize(int width, int height) {
-    ar = (float) width / (float) height;
-    glViewport(0, 0, ::width = width, ::height = height);
+    App.width = width;
+    App.height = height;
+    glViewport(0, 0, width, height);
+
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glFrustum(-ar, ar, -1.0, 1.0, 1.0, 100000.0);
+    App.ar = (float) width / (float) height;
+    glFrustum(-App.ar, App.ar, -1.0, 1.0, 1.0, 100000.0);
 }
 
 void display(void) {
     const double t { clock() / 100.0 };  // 1000.0;
-      a = t /100.0;
+    a = t /100.0;
     static int time;
     static int fps;
 
@@ -98,8 +126,27 @@ void display(void) {
     glutSwapBuffers();
 }
 
+GLuint LoadTexture(const std::string &filename) {
+    ilutInit();
+    const GLuint texture { ilutGLLoadImage(filename.c_str()) };
+    if (texture == 0) {
+        return 0;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    ilutGLBuildMipmaps();
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return texture;
+}
+
 //------------------------------------------------------------------------------------------------
-//------------------------------------------------------------------------------------------------
+
 float room_width {  100 };
 float room_height { 100 };
 float room_depth {  100 };
@@ -390,39 +437,3 @@ void idle(void) {
 }
 
 }  // anonymous namespace
-
-/*
-------------------------------------------------
--                  Main                        -
------------------------------------------------- */
-int main(int argc, char *argv[]) {
-    glutInit(&argc, argv);
-    glutInitWindowSize(640, 480);  // TODO(bkuolt): increase resolution
-    glutInitWindowPosition(10, 10);
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
-    glutEnterGameMode();
-
-    glutReshapeFunc(resize);
-    glutDisplayFunc(display);
-    glutKeyboardFunc(key);
-    glutIdleFunc(idle);
-
-    glClearColor(0, 0, 0, 1);
-    glutFullScreen();
-    glutSetCursor(GLUT_CURSOR_NONE);
-    glEnable(GL_DEPTH_TEST);
-
-    printf("Laedt MD2-Modell...\n");
-    file = new MD2(GetPath("ogros.md2"));
-    file->start(0, 10);
-    glEnable(GL_DEPTH_TEST);
-
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    glShadeModel(GL_FLAT);
-    glClearStencil(0x00);
-    glutMainLoop();
-    delete file;
-
-    return EXIT_SUCCESS;
-}
