@@ -1,4 +1,4 @@
-![Screenshot](screenshot.png)
+![Screenshot](bin/screenshot.png)
 
 # Note
 ⚠️ Please note that is some very old and bad code ⚠️
