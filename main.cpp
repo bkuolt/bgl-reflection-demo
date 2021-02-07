@@ -1,36 +1,92 @@
+<<<<<<< HEAD
 // Copyright 2020
 //#include "Windows.h"  // TODO
+=======
+// Copyright 2021
+#include <cstdlib>
+#include <csignal>
+#include <iostream>
+#include <memory>
+
+>>>>>>> refactoring
 #include <GL/glut.h>
-
-#include <stdlib.h>
-#include "MD2.h"
+#include "MD2.hpp"
 
 
-#define M_PI 3.14159265358979323846
+namespace {
 
+// forward declarations
+void resize(int width, int height);
+void key(unsigned char key, int x, int y);
+void idle(void);
+void display(void);
+
+<<<<<<< HEAD
 f
 
 namespace {
 war/sdsd.sdsds
+=======
+std::unique_ptr<MD2> file;
+>>>>>>> refactoring
 
-GLuint LoadTexture(char *filename) {
-    ilutInit();
-    const GLuint texture {ilutGLLoadImage(filename) };
-    // TODO(bkuolt): error handling
-
-    glBindTexture(GL_TEXTURE_2D, texture);
-    ilutGLBuildMipmaps();
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    return texture;
+void SignalHandler(int signal) noexcept {
+    std::exit(EXIT_FAILURE);
 }
 
+}  // anonymous namespace
+
+
+int main(int argc, char *argv[]) {
+    std::signal(SIGINT, SignalHandler);
+
+    glutInit(&argc, argv);
+    glutInitWindowSize(1280, 720);
+    glutInitWindowPosition(0, 0);
+    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
+    glutSetCursor(GLUT_CURSOR_NONE);
+
+    glutReshapeFunc(resize);
+    glutDisplayFunc(display);
+    glutKeyboardFunc(key);
+    glutIdleFunc(idle);
+
+    glutEnterGameMode();
+    glutFullScreen();
+
+    try {
+        std::iostream << "Loading MD2-Modell..." << std::endl;
+        file = std::make_unique<MD2>(GetPath("ogros.md2"));
+        file->start(0, 10);
+    } catch (const std::exception &error) {
+        std::cerr << error.what();
+        return EXIT_FAILURE;
+    }
+
+    glClearStencil(0x00);
+    glClearColor(0.0, 0.0, 0.0, 1.0);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glShadeModel(GL_FLAT);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glutMainLoop();
+    return EXIT_SUCCESS;
+}
+
+/*
+------------------------------------------------
+-                  Details                     -
+------------------------------------------------ */
+namespace {
+
+constexpr double M_PI {  3.14159265358979323846 };
+
+struct {
+    int width, height;
+    float ar;
+    double a;
+} App;
 
 // forward declarations
 void DrawMirroredRoom(void);
@@ -41,23 +97,36 @@ void DrawMirror(void);
 void DrawRoom(void);
 void DrawPattern(void);
 
-MD2 *file;
-int width, height;
-float ar;
-double a;
-
+/* ----------------------- Callbacks ----------------------- */
 
 void resize(int width, int height) {
-    ar = (float) width / (float) height;
-    glViewport(0, 0, ::width = width, ::height = height);
+    App.width = width;
+    App.height = height;
+    App.ar = static_cast<float>(width) / height;
+
+    glViewport(0, 0, width, height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glFrustum(-ar, ar, -1.0, 1.0, 1.0, 100000.0);
+    glFrustum(-App.ar, App.ar, -1.0, 1.0, 1.0, 100000.0);
+}
+
+void key(unsigned char key, int x, int y) {
+    switch (key) {
+        case 27 /** ESC */:
+        case 'q':
+            std::exit(0);
+            break;
+    }
+    glutPostRedisplay();
+}
+
+void idle(void) {
+    glutPostRedisplay();
 }
 
 void display(void) {
     const double t { clock() / 100.0 };  // 1000.0;
-      a = t /100.0;
+    a = t / 100.0;
     static int time;
     static int fps;
 
@@ -70,7 +139,6 @@ void display(void) {
     gluLookAt(sin(a) * 100, 70, cos(a) *400,
               0, 0, 0,
               0, 1, 0);
-
     glScalef(3, 3, 3);
 
     glPushMatrix();
@@ -98,12 +166,34 @@ void display(void) {
     glutSwapBuffers();
 }
 
+/* ------------------ Rendering Details -------------------- */
+
+GLuint LoadTexture(const std::string &filename) {
+    ilutInit();
+    const GLuint texture { ilutGLLoadImage(filename.c_str()) };
+    if (texture == 0) {
+        // TODO(bkuolt): error handling
+        return 0;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    ilutGLBuildMipmaps();
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return texture;
+}
+
 //------------------------------------------------------------------------------------------------
-//------------------------------------------------------------------------------------------------
-float room_width {  100 };
-float room_height { 100 };
-float room_depth {  100 };
-float mirror_width { 0.5 };  // in range [0;1]
+
+const float room_width { 100 };
+const float room_height { 100 };
+const float room_depth { 100 };
+const float mirror_width { 0.5 };  // in range [0;1]
 
 /**
  * @brief Zeichnet Boden (mit  Mittelpunkt im Ursprung)
@@ -114,29 +204,30 @@ void DrawFloor(void) {
 
     if (list == 0) {
         texture = LoadTexture("C:/glass.jpg");  // TODO(bkuolt): fix path
+        list = glGenLists(1);
 
-        glNewList(list = glGenLists(1), GL_COMPILE);
-            glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, texture);
-            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        glNewList(list, GL_COMPILE);
 
-            glPushMatrix();
-                glScalef(room_width, room_height, room_depth);
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-                glBegin(GL_QUADS);
-                    glColor4f(1.0, 1.0, 1.0, 0.55);
-                    glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, 0.5);
-                    glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, 0.5);
-                    glTexCoord2f(1.0, 1.0); glVertex3f(0.5, -0.5, -0.5);
-                    glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, -0.5, -0.5);
-                glEnd();
-            glPopMatrix();
+        glPushMatrix();
+            glScalef(room_width, room_height, room_depth);
+            glBegin(GL_QUADS);
+                glColor4f(1.0, 1.0, 1.0, 0.55);
+                glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, 0.5);
+                glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, 0.5);
+                glTexCoord2f(1.0, 1.0); glVertex3f(0.5, -0.5, -0.5);
+                glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, -0.5, -0.5);
+            glEnd();
+        glPopMatrix();
+        glBindTexture(GL_TEXTURE_2D, 0);
 
-            glBindTexture(GL_TEXTURE_2D, 0);
         glEndList();
-    } else {
-        glCallList(list);
     }
+
+    glCallList(list);
 }
 
 /**
@@ -164,27 +255,30 @@ void DrawMirror(void) {
 
     if (list == 0) {
         texture = LoadTexture("C:/mirror.jpg");  // TODO(bkuolt): fix path
+        list = glGenLists(1)
 
-        glNewList(list = glGenLists(1), GL_COMPILE);
-            glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, texture);
-            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        glNewList(list, GL_COMPILE);
 
-            glPushMatrix();
-                glScalef(room_width, room_height, room_depth);
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-                glBegin(GL_QUADS);
-                    glColor4f(1.0, 1.0, 1.0, 0.3);
-                    glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, mirror_width);
-                    glTexCoord2f(1.0, 0.0); glVertex3f(-0.5, -0.5, -mirror_width);
-                    glTexCoord2f(1.0, 1.0); glVertex3f(-0.5,  0.5, -mirror_width);
-                    glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, mirror_width);
-                glEnd();
-            glPopMatrix();
+        glPushMatrix();
+            glScalef(room_width, room_height, room_depth);
+
+            glBegin(GL_QUADS);
+                glColor4f(1.0, 1.0, 1.0, 0.3);
+                glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, mirror_width);
+                glTexCoord2f(1.0, 0.0); glVertex3f(-0.5, -0.5, -mirror_width);
+                glTexCoord2f(1.0, 1.0); glVertex3f(-0.5,  0.5, -mirror_width);
+                glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, mirror_width);
+            glEnd();
+        glPopMatrix();
+
         glEndList();
-    } else {
-        glCallList(list);
     }
+
+    glCallList(list);
 }
 
 /**
@@ -196,67 +290,69 @@ void DrawWall(void) {
 
     if (list == 0) {
         glNewList(list = glGenLists(1), GL_COMPILE);
-            glPushMatrix();
-            glScalef(room_width, room_height, room_width);
 
-            texture[0] = LoadTexture("C:/wall.jpg");
-            texture[1] = LoadTexture("C:/ceiling.jpg");
+        glPushMatrix();
+        glScalef(room_width, room_height, room_width);
 
-            glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, texture[0]);
-            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+        texture[0] = LoadTexture("C:/wall.jpg");
+        texture[1] = LoadTexture("C:/ceiling.jpg");
 
-            glBegin(GL_QUADS);
-                glColor3f(0.0, 0.0, 1.0);
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texture[0]);
+        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
-                // linke Spiegelwand
-                glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, 0.5);
-                glTexCoord2f(1.0, 0.0); glVertex3f(-0.5, -0.5, mirror_width / 2);
-                glTexCoord2f(1.0, 1.0); glVertex3f(-0.5, 0.5, mirror_width / 2);
-                glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, 0.5);
-                // rechte Spiegelwand
-                glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, -0.5);
-                glTexCoord2f(1.0, 0.0); glVertex3f(-0.5, -0.5, -mirror_width / 2);
-                glTexCoord2f(1.0, 1.0); glVertex3f(-0.5, 0.5, -mirror_width / 2);
-                glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, -0.5);
+        glBegin(GL_QUADS);
+            glColor3f(0.0, 0.0, 1.0);
 
-                glColor3f(0.0, 1.0, 0.0);
-                // Rechts
-                glTexCoord2f(0.0, 0.0); glVertex3f(0.5, -0.5, -0.5);
-                glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, 0.5);
-                glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, 0.5);
-                glTexCoord2f(0.0, 1.0); glVertex3f(0.5, 0.5, -0.5);
-                // Vorne
-                glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, -0.5);
-                glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, -0.5);
-                glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, -0.5);
-                glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, -0.5);
+            // linke Spiegelwand
+            glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, 0.5);
+            glTexCoord2f(1.0, 0.0); glVertex3f(-0.5, -0.5, mirror_width / 2);
+            glTexCoord2f(1.0, 1.0); glVertex3f(-0.5, 0.5, mirror_width / 2);
+            glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, 0.5);
+            // rechte Spiegelwand
+            glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, -0.5);
+            glTexCoord2f(1.0, 0.0); glVertex3f(-0.5, -0.5, -mirror_width / 2);
+            glTexCoord2f(1.0, 1.0); glVertex3f(-0.5, 0.5, -mirror_width / 2);
+            glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, -0.5);
 
-                glColor3f(1.0, 0.0, 0.0);
-                // Hinten
-                glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, 0.5);
-                glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, 0.5);
-                glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, 0.5);
-                glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, 0.5);
-            glEnd();
+            glColor3f(0.0, 1.0, 0.0);
+            // Rechts
+            glTexCoord2f(0.0, 0.0); glVertex3f(0.5, -0.5, -0.5);
+            glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, 0.5);
+            glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, 0.5);
+            glTexCoord2f(0.0, 1.0); glVertex3f(0.5, 0.5, -0.5);
+            // Vorne
+            glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, -0.5);
+            glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, -0.5);
+            glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, -0.5);
+            glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, -0.5);
 
-            // Decke
-            glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, texture[1]);
-            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+            glColor3f(1.0, 0.0, 0.0);
+            // Hinten
+            glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, -0.5, 0.5);
+            glTexCoord2f(1.0, 0.0); glVertex3f(0.5, -0.5, 0.5);
+            glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, 0.5);
+            glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, 0.5);
+        glEnd();
 
-            glBegin(GL_QUADS);
-                glColor4f(1, 0, 1, 1);
-                glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, 0.5, 0.5);
-                glTexCoord2f(1.0, 0.0); glVertex3f(0.5, 0.5, 0.5);
-                glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, -0.5);
-                glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, -0.5);
-            glEnd();
-            glPopMatrix();
+        // Decke
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texture[1]);
+        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+        glBegin(GL_QUADS);
+            glColor4f(1, 0, 1, 1);
+            glTexCoord2f(0.0, 0.0); glVertex3f(-0.5, 0.5, 0.5);
+            glTexCoord2f(1.0, 0.0); glVertex3f(0.5, 0.5, 0.5);
+            glTexCoord2f(1.0, 1.0); glVertex3f(0.5, 0.5, -0.5);
+            glTexCoord2f(0.0, 1.0); glVertex3f(-0.5, 0.5, -0.5);
+        glEnd();
+        glPopMatrix();
+
         glEndList();
-    } else {
-        glCallList(list);
     }
+
+    glCallList(list);
 }
 
 void DrawMirroredRoom(void) {
@@ -365,7 +461,7 @@ void DrawPattern(void) {
     glEnable(GL_POLYGON_STIPPLE);
     glPolygonStipple(stipple);
     glColor3f(1.1, 1, 1);
-    glRectd(-1, -1, 1, 1);
+    glRectd(-1.0, -1.0, 1.0, 1.0);
     glDisable(GL_POLYGON_STIPPLE);
 
     glDisable(GL_STENCIL_TEST);
@@ -375,54 +471,4 @@ void DrawPattern(void) {
     glFrustum(-ar, ar, -1.0, 1.0, 1.0, 100000.0);
 }
 
-void key(unsigned char key, int x, int y) {
-    switch (key) {
-        case 27 /** ESC */:
-        case 'q':
-            exit(0);
-            break;
-    }
-    glutPostRedisplay();
-}
-
-void idle(void) {
-    glutPostRedisplay();
-}
-
 }  // anonymous namespace
-
-/*
-------------------------------------------------
--                  Main                        -
------------------------------------------------- */
-int main(int argc, char *argv[]) {
-    glutInit(&argc, argv);
-    glutInitWindowSize(640, 480);  // TODO(bkuolt): increase resolution
-    glutInitWindowPosition(10, 10);
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
-    glutEnterGameMode();
-
-    glutReshapeFunc(resize);
-    glutDisplayFunc(display);
-    glutKeyboardFunc(key);
-    glutIdleFunc(idle);
-
-    glClearColor(0, 0, 0, 1);
-    glutFullScreen();
-    glutSetCursor(GLUT_CURSOR_NONE);
-    glEnable(GL_DEPTH_TEST);
-
-    printf("Laedt MD2-Modell...\n");
-    file = new MD2(GetPath("ogros.md2"));
-    file->start(0, 10);
-    glEnable(GL_DEPTH_TEST);
-
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    glShadeModel(GL_FLAT);
-    glClearStencil(0x00);
-    glutMainLoop();
-    delete file;
-
-    return EXIT_SUCCESS;
-}
