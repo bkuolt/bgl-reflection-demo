@@ -1,7 +1,5 @@
 // Copyright 2020
-#include "Windows.h"
-#include "GLee.h"
-
+//#include "Windows.h"  // TODO
 #include <GL/glut.h>
 
 #include <stdlib.h>
@@ -10,7 +8,10 @@
 
 #define M_PI 3.14159265358979323846
 
+f
+
 namespace {
+war/sdsd.sdsds
 
 GLuint LoadTexture(char *filename) {
     ilutInit();
