@@ -2,15 +2,14 @@
 #ifndef MD2_H_
 #define MD2_H_
 
-#include "FileHeader.h"
+#include "FileHeader.hpp"
 #include "IL/ILUT.h"
 
 #include <algorithm>
-
 #include <cmath>
 #include <ctime>
 #include <fstream>
-#include <string>  
+#include <string>
 #include <vector>
 
 
@@ -21,21 +20,23 @@
 #define MAX 1
 
 
-clock_t glutGet(void) {
-    return clock();
+namespace {
+
+inline std::clock_t glutGet(void) noexcept {
+    return std::clock();
 }
 
 std::string GetPath(void) {
     const char *name { GetCommandLine() };
-    int length { strlen(GetCommandLine()) };
+    std::size_t length { std::strlen(GetCommandLine()) };
 
-    while (name[length -1] != '\\') {
+    while (name[length - 1] != '\\') {
         --length;
     }
     return std::string(name + 1, name + length);
 }
 
-std::string GetPath(const std::string &name) {
+inline std::string GetPath(const std::string &name) {
     return GetPath() + name;
 }
 
@@ -61,6 +62,8 @@ void glutBitmapString(void *font, const char *string) {
     }
 }
 
+}  // anonymous namespace
+
 
 class MD2 {
  public:
@@ -68,23 +71,6 @@ class MD2 {
         float **vertices {};
         char name[16];
     };
-
- private:
-    Keyframe *keyframes {};
-    unsigned int *indices {};
-    float **texture_coords {};
-    size_t keyframe_count;
-    size_t vertex_count;
-    size_t triangle_count;
-    GLuint texture;
-    anim_t *animations {};
-    size_t animation_count;
-
-    float **current_vertices {};
-    size_t current_frame;
-    size_t current_animation;
-    size_t fps;
-    bool started;
 
  public:
     explicit MD2(const std::string &filename) {
@@ -98,26 +84,27 @@ class MD2 {
 
         file.open(filename.c_str(), std::ifstream::binary);
         file.read(reinterpret_cast<char*>(&header), sizeof(md2_t));
+        // TODO(bkuolt): error handling
 
-        keyframe_count = header.num_frames;
-        vertex_count = header.num_xyz;
-        triangle_count = header.num_tris;
+        _keyframe_count = header.num_frames;
+        _vertex_count = header.num_xyz;
+        _triangle_count = header.num_tris;
 
         /**
          * @brief Reserviert Speicher
          */
-        indices = new unsigned int[triangle_count * 3];
-        keyframes = new Keyframe[keyframe_count];
+        _indices = new unsigned int[triangle_count * 3];
+        _keyframes = new Keyframe[keyframe_count];
 
-        for (size_t f = 0; f < keyframe_count; ++f) {
+        for (auto f = 0u; f < keyframe_count; ++f) {
             keyframes[f].vertices = new float*[vertex_count];
-                for (size_t i = 0; i < vertex_count; ++i) {
-                    keyframes[f].vertices[i] = new float[3];
-                }
+            for (auto i = 0u; i < vertex_count; ++i) {
+                keyframes[f].vertices[i] = new float[3];
+            }
         }
 
-        texture_coords = new float*[triangle_count * 3];
-        for (size_t i = 0; i < triangle_count * 3; ++i) {
+        _texture_coords = new float*[triangle_count * 3];
+        for (auto i = 0u; i < triangle_count * 3; ++i) {
             texture_coords[i] = new float[2];
         }
 
@@ -188,18 +175,25 @@ class MD2 {
         /**
          * @brief Lädt Textur
          */
+
+        // TODO(bkuolt): sollte in eigene Funktion
         char skin[64] { "C:\igdosh.png" };
 
         file.seekg(header.ofs_skins, std::ios_base::beg);
         file.read(skin, 64);
 
-        // DevIL
+        // intializes DevIL
         ilInit();
         iluInit();
         ilutInit();
         ilutRenderer(ILUT_OPENGL);
-        texture = LoadImage("igdosh.bmp");
+        try {
+            texture = LoadImage("igdosh.bmp");
+        } catch (std::exception &error) {
+            // TODO(bkuolt): error handling
+        }
         ilShutDown();
+        // -----------------------
 
         /**
          * @brief Erstellt Animationsliste
@@ -295,12 +289,9 @@ class MD2 {
         interpolate(current_vertices, first, second, factor);
     }
 
-    void next(void) {
+    void next(void) noexcept {
         if (animations[current_animation].last_frame == animations[current_animation].first_frame + current_frame) {
             current_frame = 0;
-            // current_animation++;
-            // if(current_animation == animation_count)
-            //      current_animation = 0;
         } else {
             ++current_frame;
         }
@@ -419,6 +410,23 @@ class MD2 {
             }
         }
     }
+
+ private:
+    Keyframe *_keyframes {};
+    unsigned int *_indices {};
+    float **_texture_coords {};
+    std::size_t _keyframe_count;
+    std::size_t _vertex_count;
+    std::size_t _triangle_count;
+    GLuint _texture;
+    anim_t *_animations {};
+    std::size_t _animation_count;
+
+    float **current_vertices {};
+    std::size_t _current_frame;
+    std::size_t _current_animation;
+    std::size_t _fps;
+    bool started;
 };
 
 #endif  // MD2_H_
