@@ -1,7 +1,5 @@
 // Copyright 2020
-#include "Windows.h"
-#include "GLee.h"
-
+//#include "Windows.h"  // TODO
 #include <GL/glut.h>
 
 #include <stdlib.h>
