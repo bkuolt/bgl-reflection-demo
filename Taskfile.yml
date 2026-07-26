@@ -2,7 +2,7 @@ version: '3'
 
 tasks:
   default:
-    desc: "Default task: build project"
+    desc: "Build application"
     deps: [build]
 
   lock:
@@ -11,7 +11,7 @@ tasks:
       - conan lock create conanfile.py --build=missing
 
   conan-install:
-    desc: "Install dependencies using Conan 2.x with conan.lock"
+    desc: "Install dependencies using Conan 2.x"
     cmds:
       - CMAKE_POLICY_VERSION_MINIMUM=3.5 conan install . --lockfile=conan.lock --build=missing -s build_type=Debug
 
@@ -22,15 +22,21 @@ tasks:
       - cmake --preset conan-debug
 
   build:
-    desc: "Build the application"
+    desc: "Build executable"
     deps: [configure]
     cmds:
       - cmake --build --preset conan-debug
 
   run:
-    desc: "Run the bgl-reflection-demo executable"
+    desc: "Run bgl-reflection-demo executable"
     cmds:
       - ./build/Debug/bgl-reflection-demo
+
+  rebuild:
+    desc: "Clean and rebuild from scratch"
+    cmds:
+      - task: clean
+      - task: build
 
   clean:
     desc: "Clean build artifacts"

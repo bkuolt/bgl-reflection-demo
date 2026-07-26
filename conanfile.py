@@ -9,11 +9,13 @@ class BglReflectionDemoConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain"
 
     default_options = {
-        "freeglut/*:with_wayland": False,
+        "glad/*:gl_version": "4.6",
+        "glad/*:gl_profile": "core",
     }
 
     def requirements(self):
-        self.requires("freeglut/3.8.0")
+        self.requires("glfw/3.4")
+        self.requires("glad/0.1.36")
         self.requires("devil/1.8.0")
         self.requires("opengl/system")
         self.requires("spdlog/1.15.0")
