@@ -20,6 +20,14 @@
 
 namespace bgl {
 
+// ============================================================================
+// NOTE FOR BASTI (Future OpenGL 4.6 Migration):
+// ----------------------------------------------------------------------------
+// ApplicationState holds global viewport and timing state.
+// In OpenGL 4.6 Core Profile:
+// - Replace GLUT callbacks with an explicit GLFW/SDL2 window class.
+// - Pass aspect ratio and viewport updates directly to your Camera / MVP UBO.
+// ============================================================================
 struct ApplicationState {
   int width{1920};
   int height{1080};
@@ -53,6 +61,17 @@ void signalHandler(int signal) noexcept {
   return LoadImage(path.string());
 }
 
+// ============================================================================
+// NOTE FOR BASTI (Future OpenGL 4.6 Migration):
+// ----------------------------------------------------------------------------
+// SceneResources encapsulates legacy display lists (glGenLists, glNewList, glCallList).
+// When porting to OpenGL 4.6:
+// 1. Replace display lists with VAO (Vertex Array Object) and VBO (Vertex Buffer Object) buffers.
+// 2. Replace fixed-function texture environment (GL_TEXTURE_ENV, GL_MODULATE/GL_REPLACE)
+//    with fragment shader texture sampling: `fragColor = texture(uTextureSampler, vTexCoord);`.
+// 3. For planar reflections, replace stencil buffer multi-pass rendering with a
+//    dedicated Framebuffer Object (FBO) render-to-texture pass or reflection shader.
+// ============================================================================
 class SceneResources {
 public:
   SceneResources() = default;
@@ -109,7 +128,7 @@ public:
     glEnable(GL_STENCIL_TEST);
     glDepthMask(GL_FALSE);
 
-    // Render mirror floor into stencil buffer
+    // Step 1: Render mirror floor into stencil buffer without writing to color buffer
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
     glStencilFunc(GL_ALWAYS, 1, 0);
     glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
@@ -122,22 +141,22 @@ public:
 
     glDepthMask(GL_TRUE);
 
-    // Render mirrored reflection of character model
+    // Step 2: Render mirrored reflection of character model (scaled y by -1)
     glPushMatrix();
     glTranslatef(0.0f, -100.0f, 0.0f);
     glScalef(1.0f, -1.0f, 1.0f);
     drawModel();
     glPopMatrix();
 
-    // Render floor surface
+    // Step 3: Render semi-transparent floor surface
     drawFloor();
 
-    // Render primary model
+    // Step 4: Render primary character model
     glDisable(GL_STENCIL_TEST);
     drawModel();
     glDisable(GL_BLEND);
 
-    // Write model depth stencil mask
+    // Step 5: Write model depth stencil mask
     glEnable(GL_STENCIL_TEST);
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 

@@ -5,10 +5,15 @@ tasks:
     desc: "Default task: build project"
     deps: [build]
 
-  conan-install:
-    desc: "Install dependencies using Conan 2.x"
+  lock:
+    desc: "Generate conan.lock file"
     cmds:
-      - CMAKE_POLICY_VERSION_MINIMUM=3.5 conan install . --build=missing -s build_type=Debug
+      - conan lock create conanfile.py --build=missing
+
+  conan-install:
+    desc: "Install dependencies using Conan 2.x with conan.lock"
+    cmds:
+      - CMAKE_POLICY_VERSION_MINIMUM=3.5 conan install . --lockfile=conan.lock --build=missing -s build_type=Debug
 
   configure:
     desc: "Configure CMake using Conan toolchain preset"
