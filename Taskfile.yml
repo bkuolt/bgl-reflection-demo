@@ -1,0 +1,33 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Default task: build project"
+    deps: [build]
+
+  conan-install:
+    desc: "Install dependencies using Conan 2.x"
+    cmds:
+      - CMAKE_POLICY_VERSION_MINIMUM=3.5 conan install . --build=missing -s build_type=Debug
+
+  configure:
+    desc: "Configure CMake using Conan toolchain preset"
+    deps: [conan-install]
+    cmds:
+      - cmake --preset conan-debug
+
+  build:
+    desc: "Build the application"
+    deps: [configure]
+    cmds:
+      - cmake --build --preset conan-debug
+
+  run:
+    desc: "Run the bgl-reflection-demo executable"
+    cmds:
+      - ./build/Debug/bgl-reflection-demo
+
+  clean:
+    desc: "Clean build artifacts"
+    cmds:
+      - rm -rf build CMakeUserPresets.json
