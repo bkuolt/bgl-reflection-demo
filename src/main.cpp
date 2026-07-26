@@ -374,13 +374,14 @@ int main(int argc, char *argv[]) {
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    // Compute View and Projection Matrices
+    // Compute View and Projection Matrices (Closer camera distance & model framing)
+    constexpr float camera_radius = 180.0f;
     const glm::vec3 eye(
-        std::sin(static_cast<float>(bgl::g_app.animation_time)) * 100.0f,
-        70.0f,
-        std::cos(static_cast<float>(bgl::g_app.animation_time)) * 400.0f
+        std::sin(static_cast<float>(bgl::g_app.animation_time) * 0.4f) * camera_radius,
+        35.0f + std::sin(static_cast<float>(bgl::g_app.animation_time) * 0.2f) * 15.0f,
+        std::cos(static_cast<float>(bgl::g_app.animation_time) * 0.4f) * camera_radius
     );
-    constexpr glm::vec3 center(0.0f, 0.0f, 0.0f);
+    constexpr glm::vec3 center(0.0f, -25.0f, 0.0f);
     constexpr glm::vec3 up(0.0f, 1.0f, 0.0f);
 
     const glm::mat4 view = glm::lookAt(eye, center, up);
