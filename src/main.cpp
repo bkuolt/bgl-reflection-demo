@@ -6,124 +6,319 @@
 #include <GL/glu.h>
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <spdlog/spdlog.h>
 
+#include <array>
 #include <csignal>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <memory>
 #include <string>
+#include <string_view>
 
-namespace {
-
-// Forward declarations
-void resize(int width, int height);
-void key(unsigned char key, int x, int y);
-void idle();
-void display();
-
-std::unique_ptr<MD2> model_file;
-
-void signalHandler(int signal) noexcept {
-  spdlog::info("Received signal {}, shutting down application", signal);
-  std::exit(EXIT_FAILURE);
-}
+namespace bgl {
 
 struct ApplicationState {
-  int width{1280};
-  int height{720};
-  float ar{16.0f / 9.0f};
-  double a{0.0};
+  int width{1920};
+  int height{1080};
+  float aspect_ratio{16.0f / 9.0f};
+  double animation_time{0.0};
 };
 
-ApplicationState app;
+ApplicationState g_app;
 
 constexpr float ROOM_WIDTH{100.0f};
 constexpr float ROOM_HEIGHT{100.0f};
 constexpr float ROOM_DEPTH{100.0f};
 constexpr float MIRROR_WIDTH{0.5f};
 
-void drawMirroredRoom();
-void drawFloor();
-void drawModel();
-void drawWall();
-void drawMirror();
-void drawRoom();
-void drawPattern();
+// Forward declarations of FreeGLUT callbacks
+void resizeCallback(int width, int height) noexcept;
+void keyboardCallback(unsigned char key, int x, int y) noexcept;
+void idleCallback() noexcept;
+void displayCallback();
 
-GLuint loadTextureWithFallback(const std::string &filename, const std::string &fallback = "glass.jpg") {
-  auto path = bgl::GetAssetPath(filename);
+void signalHandler(int signal) noexcept {
+  spdlog::info("Received signal {}, shutting down application", signal);
+  std::exit(EXIT_FAILURE);
+}
+
+[[nodiscard]] GLuint loadTextureWithFallback(std::string_view filename, std::string_view fallback = "glass.jpg") {
+  auto path = GetAssetPath(filename);
   if (!std::filesystem::exists(path)) {
-    path = bgl::GetAssetPath(fallback);
+    path = GetAssetPath(fallback);
   }
-  return bgl::LoadImage(path.string());
+  return LoadImage(path.string());
 }
 
-} // anonymous namespace
+class SceneResources {
+public:
+  SceneResources() = default;
 
-int main(int argc, char *argv[]) {
-  std::signal(SIGINT, signalHandler);
-
-  spdlog::info("Starting BGL Reflection Demo on amd64 Ubuntu Linux (C++23)");
-
-  // Force FreeGLUT to use XWayland/X11 display backend on Wayland desktop sessions
-  if (std::getenv("WAYLAND_DISPLAY") != nullptr) {
-    spdlog::info("Wayland desktop detected: routing FreeGLUT display connection through XWayland/X11");
-    unsetenv("WAYLAND_DISPLAY");
+  ~SceneResources() noexcept {
+    cleanup();
   }
 
-  glutInit(&argc, argv);
-  glutInitWindowSize(app.width, app.height);
-  glutInitWindowPosition(0, 0);
-  glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
+  void initialize(MD2 *model) {
+    _model = model;
+    _floor_texture = loadTextureWithFallback("glass.jpg");
+    _wall_textures[0] = loadTextureWithFallback("wall.jpg", "glass.jpg");
+    _wall_textures[1] = loadTextureWithFallback("ceiling.jpg", "glass.jpg");
+    _mirror_texture = loadTextureWithFallback("mirror.jpg", "glass.jpg");
 
-  glutCreateWindow("BGL Reflection Demo (amd64 Ubuntu)");
-  glutSetCursor(GLUT_CURSOR_NONE);
-  glutFullScreen();
-
-  glutReshapeFunc(resize);
-  glutDisplayFunc(display);
-  glutKeyboardFunc(key);
-  glutIdleFunc(idle);
-
-  try {
-    spdlog::info("Loading MD2 model...");
-    auto model_path = bgl::GetAssetPath("Ogros.md2");
-    model_file = std::make_unique<MD2>(model_path.string());
-    model_file->start(0, 10);
-  } catch (const std::exception &error) {
-    spdlog::error("Error loading model: {}", error.what());
-    return EXIT_FAILURE;
+    buildDisplayLists();
   }
 
-  glClearStencil(0x00);
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  glEnable(GL_DEPTH_TEST);
-  glShadeModel(GL_FLAT);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  void drawFloor() const {
+    if (_floor_list != 0) {
+      glCallList(_floor_list);
+    }
+  }
 
-  spdlog::info("Entering FreeGLUT main loop");
-  glutMainLoop();
-  return EXIT_SUCCESS;
-}
+  void drawWall() const {
+    if (_wall_list != 0) {
+      glCallList(_wall_list);
+    }
+  }
 
-namespace {
+  void drawMirror() const {
+    if (_mirror_list != 0) {
+      glCallList(_mirror_list);
+    }
+  }
 
-void resize(int width, int height) {
-  app.width = width;
-  app.height = (height == 0) ? 1 : height;
-  app.ar = static_cast<float>(app.width) / static_cast<float>(app.height);
+  void drawModel() const {
+    if (!_model) return;
 
-  glViewport(0, 0, app.width, app.height);
+    glPushMatrix();
+    glTranslatef(0.0f, -25.0f, 0.0f);
+    glRotatef(glm::degrees(static_cast<float>(g_app.animation_time)), 0.0f, 1.0f, 0.0f);
+    glPushMatrix();
+    glRotatef(-180.0f, 0.0f, 1.0f, 0.0f);
+    glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
+    glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
+    _model->animate();
+    glPopMatrix();
+    glPopMatrix();
+  }
+
+  void drawRoom() const {
+    glEnable(GL_BLEND);
+    glEnable(GL_STENCIL_TEST);
+    glDepthMask(GL_FALSE);
+
+    // Render mirror floor into stencil buffer
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glStencilFunc(GL_ALWAYS, 1, 0);
+    glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
+
+    drawFloor();
+
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glStencilFunc(GL_EQUAL, 1, 1);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+    glDepthMask(GL_TRUE);
+
+    // Render mirrored reflection of character model
+    glPushMatrix();
+    glTranslatef(0.0f, -100.0f, 0.0f);
+    glScalef(1.0f, -1.0f, 1.0f);
+    drawModel();
+    glPopMatrix();
+
+    // Render floor surface
+    drawFloor();
+
+    // Render primary model
+    glDisable(GL_STENCIL_TEST);
+    drawModel();
+    glDisable(GL_BLEND);
+
+    // Write model depth stencil mask
+    glEnable(GL_STENCIL_TEST);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+    glStencilFunc(GL_ALWAYS, 1, 0);
+    glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
+    drawModel();
+
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDisable(GL_STENCIL_TEST);
+  }
+
+  void drawStipplePattern() const {
+    constexpr std::array<GLubyte, 128> stipple_pattern = {
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
+
+        0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
+        0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
+        0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
+        0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF
+    };
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(-1.0, 1.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    glEnable(GL_STENCIL_TEST);
+    glStencilFunc(GL_NOTEQUAL, 1, 1);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+    glEnable(GL_POLYGON_STIPPLE);
+    glPolygonStipple(stipple_pattern.data());
+    glColor3f(1.1f, 1.0f, 1.0f);
+    glRectd(-1.0, -1.0, 1.0, 1.0);
+    glDisable(GL_POLYGON_STIPPLE);
+
+    glDisable(GL_STENCIL_TEST);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glFrustum(-g_app.aspect_ratio, g_app.aspect_ratio, -1.0, 1.0, 1.0, 100000.0);
+  }
+
+private:
+  void buildDisplayLists() {
+    // 1. Build Floor List
+    _floor_list = glGenLists(1);
+    glNewList(_floor_list, GL_COMPILE);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _floor_texture);
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+    glPushMatrix();
+    glScalef(ROOM_WIDTH, ROOM_HEIGHT, ROOM_DEPTH);
+    glBegin(GL_QUADS);
+    glColor4f(1.0f, 1.0f, 1.0f, 0.55f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, 0.5f);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, -0.5f, 0.5f);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, -0.5f, -0.5f);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, -0.5f, -0.5f);
+    glEnd();
+    glPopMatrix();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glEndList();
+
+    // 2. Build Mirror List
+    _mirror_list = glGenLists(1);
+    glNewList(_mirror_list, GL_COMPILE);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _mirror_texture);
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+    glPushMatrix();
+    glScalef(ROOM_WIDTH, ROOM_HEIGHT, ROOM_DEPTH);
+    glBegin(GL_QUADS);
+    glColor4f(1.0f, 1.0f, 1.0f, 0.3f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, MIRROR_WIDTH);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(-0.5f, -0.5f, -MIRROR_WIDTH);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -MIRROR_WIDTH);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, MIRROR_WIDTH);
+    glEnd();
+    glPopMatrix();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glEndList();
+
+    // 3. Build Wall List
+    _wall_list = glGenLists(1);
+    glNewList(_wall_list, GL_COMPILE);
+    glPushMatrix();
+    glScalef(ROOM_WIDTH, ROOM_HEIGHT, ROOM_WIDTH);
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _wall_textures[0]);
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+    glBegin(GL_QUADS);
+    glColor3f(0.0f, 0.0f, 1.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, 0.5f);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(-0.5f, -0.5f, MIRROR_WIDTH / 2.0f);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(-0.5f, 0.5f, MIRROR_WIDTH / 2.0f);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, 0.5f);
+
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, -0.5f);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(-0.5f, -0.5f, -MIRROR_WIDTH / 2.0f);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -MIRROR_WIDTH / 2.0f);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -0.5f);
+
+    glColor3f(0.0f, 1.0f, 0.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(0.5f, -0.5f, -0.5f);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, -0.5f, 0.5f);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, 0.5f, 0.5f);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(0.5f, 0.5f, -0.5f);
+
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, -0.5f);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, -0.5f, -0.5f);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, 0.5f, -0.5f);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -0.5f);
+
+    glColor3f(1.0f, 0.0f, 0.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, 0.5f);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, -0.5f, 0.5f);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, 0.5f, 0.5f);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, 0.5f);
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D, _wall_textures[1]);
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+    glBegin(GL_QUADS);
+    glColor4f(1.0f, 0.0f, 1.0f, 1.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, 0.5f, 0.5f);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, 0.5f, 0.5f);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, 0.5f, -0.5f);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -0.5f);
+    glEnd();
+    glPopMatrix();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glEndList();
+  }
+
+  void cleanup() noexcept {
+    if (_floor_list != 0) { glDeleteLists(_floor_list, 1); _floor_list = 0; }
+    if (_mirror_list != 0) { glDeleteLists(_mirror_list, 1); _mirror_list = 0; }
+    if (_wall_list != 0) { glDeleteLists(_wall_list, 1); _wall_list = 0; }
+
+    if (_floor_texture != 0) { glDeleteTextures(1, &_floor_texture); _floor_texture = 0; }
+    if (_mirror_texture != 0) { glDeleteTextures(1, &_mirror_texture); _mirror_texture = 0; }
+    if (_wall_textures[0] != 0) { glDeleteTextures(1, &_wall_textures[0]); _wall_textures[0] = 0; }
+    if (_wall_textures[1] != 0) { glDeleteTextures(1, &_wall_textures[1]); _wall_textures[1] = 0; }
+  }
+
+private:
+  MD2 *_model{nullptr};
+  GLuint _floor_texture{0};
+  GLuint _mirror_texture{0};
+  GLuint _wall_textures[2]{0, 0};
+
+  GLuint _floor_list{0};
+  GLuint _mirror_list{0};
+  GLuint _wall_list{0};
+};
+
+std::unique_ptr<MD2> g_model;
+std::unique_ptr<SceneResources> g_scene;
+
+void resizeCallback(int width, int height) noexcept {
+  g_app.width = width;
+  g_app.height = (height == 0) ? 1 : height;
+  g_app.aspect_ratio = static_cast<float>(g_app.width) / static_cast<float>(g_app.height);
+
+  glViewport(0, 0, g_app.width, g_app.height);
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  glFrustum(-app.ar, app.ar, -1.0, 1.0, 1.0, 100000.0);
+  glFrustum(-g_app.aspect_ratio, g_app.aspect_ratio, -1.0, 1.0, 1.0, 100000.0);
 }
 
-void key(unsigned char key_code, int x, int y) {
+void keyboardCallback(unsigned char key_code, int x, int y) noexcept {
   switch (key_code) {
   case 27: // ESC key
   case 'q':
@@ -137,16 +332,16 @@ void key(unsigned char key_code, int x, int y) {
   glutPostRedisplay();
 }
 
-void idle() {
+void idleCallback() noexcept {
   glutPostRedisplay();
 }
 
-void display() {
-  const double t = glutGet(GLUT_ELAPSED_TIME) / 1000.0;
-  app.a = t;
+void displayCallback() {
+  const double time_seconds = glutGet(GLUT_ELAPSED_TIME) / 1000.0;
+  g_app.animation_time = time_seconds;
 
   static int last_time = 0;
-  static int fps = 0;
+  static int frame_counter = 0;
   static std::string fps_text{"BGL Animation Tech Demo @ 0 FPS"};
 
   glDepthFunc(GL_LEQUAL);
@@ -155,42 +350,42 @@ void display() {
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
 
-  // GLM math for camera view calculation
-  glm::vec3 eye(
-      std::sin(static_cast<float>(app.a)) * 100.0f,
+  // GLM camera calculation
+  const glm::vec3 eye(
+      std::sin(static_cast<float>(g_app.animation_time)) * 100.0f,
       70.0f,
-      std::cos(static_cast<float>(app.a)) * 400.0f
+      std::cos(static_cast<float>(g_app.animation_time)) * 400.0f
   );
-  glm::vec3 center(0.0f, 0.0f, 0.0f);
-  glm::vec3 up(0.0f, 1.0f, 0.0f);
+  constexpr glm::vec3 center(0.0f, 0.0f, 0.0f);
+  constexpr glm::vec3 up(0.0f, 1.0f, 0.0f);
 
   gluLookAt(eye.x, eye.y, eye.z, center.x, center.y, center.z, up.x, up.y, up.z);
   glScalef(3.0f, 3.0f, 3.0f);
 
-  glPushMatrix();
-  glPushMatrix();
-  glTranslatef(0.0f, 20.0f, 0.0f);
-  drawRoom();
-  glPopMatrix();
-  glPopMatrix();
+  if (g_scene) {
+    glPushMatrix();
+    glTranslatef(0.0f, 20.0f, 0.0f);
+    g_scene->drawRoom();
+    glPopMatrix();
 
-  drawPattern();
+    g_scene->drawStipplePattern();
+  }
 
   // Calculate FPS
-  int current_time = glutGet(GLUT_ELAPSED_TIME);
+  const int current_time = glutGet(GLUT_ELAPSED_TIME);
   if (current_time >= last_time + 1000) {
-    fps_text = std::format("BGL Animation Tech Demo @ {} FPS", fps);
-    fps = 0;
+    fps_text = std::format("BGL Animation Tech Demo @ {} FPS", frame_counter);
+    frame_counter = 0;
     last_time = current_time;
   } else {
-    fps++;
+    frame_counter++;
   }
 
   // Render 2D FPS Text Overlay using orthographic projection
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
   glLoadIdentity();
-  gluOrtho2D(0, app.width, 0, app.height);
+  gluOrtho2D(0, g_app.width, 0, g_app.height);
 
   glMatrixMode(GL_MODELVIEW);
   glPushMatrix();
@@ -198,7 +393,7 @@ void display() {
 
   glColor3f(1.0f, 0.0f, 0.0f);
   glRasterPos2i(10, 20);
-  bgl::glutBitmapString(GLUT_BITMAP_HELVETICA_18, fps_text.c_str());
+  glutBitmapString(GLUT_BITMAP_HELVETICA_18, fps_text);
 
   glMatrixMode(GL_MODELVIEW);
   glPopMatrix();
@@ -209,284 +404,59 @@ void display() {
   glutSwapBuffers();
 }
 
-void drawFloor() {
-  static GLuint list{0};
-  static GLuint texture{0};
+} // namespace bgl
 
-  if (list == 0) {
-    texture = loadTextureWithFallback("glass.jpg");
-    list = glGenLists(1);
+int main(int argc, char *argv[]) {
+  std::signal(SIGINT, bgl::signalHandler);
 
-    glNewList(list, GL_COMPILE);
+  spdlog::info("Starting BGL Reflection Demo on amd64 Ubuntu Linux (C++23)");
 
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-
-    glPushMatrix();
-    glScalef(ROOM_WIDTH, ROOM_HEIGHT, ROOM_DEPTH);
-    glBegin(GL_QUADS);
-    glColor4f(1.0f, 1.0f, 1.0f, 0.55f);
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, 0.5f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(0.5f, -0.5f, 0.5f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(0.5f, -0.5f, -0.5f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-0.5f, -0.5f, -0.5f);
-    glEnd();
-    glPopMatrix();
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glEndList();
+  // Force FreeGLUT to use XWayland/X11 display backend on Wayland desktop sessions
+  if (std::getenv("WAYLAND_DISPLAY") != nullptr) {
+    spdlog::info("Wayland desktop detected: routing FreeGLUT display connection through XWayland/X11");
+    unsetenv("WAYLAND_DISPLAY");
   }
 
-  glCallList(list);
-}
+  glutInit(&argc, argv);
+  glutInitWindowSize(bgl::g_app.width, bgl::g_app.height);
+  glutInitWindowPosition(0, 0);
+  glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
 
-void drawModel() {
-  if (!model_file) return;
+  glutCreateWindow("BGL Reflection Demo (amd64 Ubuntu)");
+  glutSetCursor(GLUT_CURSOR_NONE);
+  glutFullScreen();
 
-  glPushMatrix();
-  glTranslatef(0.0f, -25.0f, 0.0f);
-  glRotatef(glm::degrees(static_cast<float>(app.a)), 0.0f, 1.0f, 0.0f);
-  glPushMatrix();
-  glRotatef(-180.0f, 0.0f, 1.0f, 0.0f);
-  glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
-  glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
-  model_file->animate();
-  glPopMatrix();
-  glPopMatrix();
-}
+  glutReshapeFunc(bgl::resizeCallback);
+  glutDisplayFunc(bgl::displayCallback);
+  glutKeyboardFunc(bgl::keyboardCallback);
+  glutIdleFunc(bgl::idleCallback);
 
-void drawMirror() {
-  static GLuint list{0};
-  static GLuint texture{0};
+  try {
+    spdlog::info("Loading MD2 model...");
+    const auto model_path = bgl::GetAssetPath("Ogros.md2");
+    bgl::g_model = std::make_unique<bgl::MD2>(model_path);
+    bgl::g_model->start(0, 10);
 
-  if (list == 0) {
-    texture = loadTextureWithFallback("mirror.jpg", "glass.jpg");
-    list = glGenLists(1);
-
-    glNewList(list, GL_COMPILE);
-
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-
-    glPushMatrix();
-    glScalef(ROOM_WIDTH, ROOM_HEIGHT, ROOM_DEPTH);
-
-    glBegin(GL_QUADS);
-    glColor4f(1.0f, 1.0f, 1.0f, 0.3f);
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, MIRROR_WIDTH);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, -MIRROR_WIDTH);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, -MIRROR_WIDTH);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, MIRROR_WIDTH);
-    glEnd();
-    glPopMatrix();
-
-    glEndList();
+    spdlog::info("Initializing scene resources...");
+    bgl::g_scene = std::make_unique<bgl::SceneResources>();
+    bgl::g_scene->initialize(bgl::g_model.get());
+  } catch (const std::exception &error) {
+    spdlog::error("Error initializing scene: {}", error.what());
+    return EXIT_FAILURE;
   }
 
-  glCallList(list);
+  glClearStencil(0x00);
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glEnable(GL_DEPTH_TEST);
+  glShadeModel(GL_FLAT);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  spdlog::info("Entering FreeGLUT main loop");
+  glutMainLoop();
+
+  // Reset resources on clean shutdown
+  bgl::g_scene.reset();
+  bgl::g_model.reset();
+
+  return EXIT_SUCCESS;
 }
-
-void drawWall() {
-  static GLuint list{0};
-  static GLuint texture[2]{0, 0};
-
-  if (list == 0) {
-    list = glGenLists(1);
-    glNewList(list, GL_COMPILE);
-
-    glPushMatrix();
-    glScalef(ROOM_WIDTH, ROOM_HEIGHT, ROOM_WIDTH);
-
-    texture[0] = loadTextureWithFallback("wall.jpg", "glass.jpg");
-    texture[1] = loadTextureWithFallback("ceiling.jpg", "glass.jpg");
-
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, texture[0]);
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-    glBegin(GL_QUADS);
-    glColor3f(0.0f, 0.0f, 1.0f);
-
-    // Left mirror wall
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, 0.5f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, MIRROR_WIDTH / 2.0f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, MIRROR_WIDTH / 2.0f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, 0.5f);
-
-    // Right mirror wall
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, -0.5f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, -MIRROR_WIDTH / 2.0f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, -MIRROR_WIDTH / 2.0f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, -0.5f);
-
-    glColor3f(0.0f, 1.0f, 0.0f);
-    // Right wall
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(0.5f, -0.5f, -0.5f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(0.5f, -0.5f, 0.5f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(0.5f, 0.5f, 0.5f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(0.5f, 0.5f, -0.5f);
-
-    // Front wall
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, -0.5f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(0.5f, -0.5f, -0.5f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(0.5f, 0.5f, -0.5f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, -0.5f);
-
-    glColor3f(1.0f, 0.0f, 0.0f);
-    // Back wall
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-0.5f, -0.5f, 0.5f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(0.5f, -0.5f, 0.5f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(0.5f, 0.5f, 0.5f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, 0.5f);
-    glEnd();
-
-    // Ceiling
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, texture[1]);
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-    glBegin(GL_QUADS);
-    glColor4f(1.0f, 0.0f, 1.0f, 1.0f);
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex3f(-0.5f, 0.5f, 0.5f);
-    glTexCoord2f(1.0f, 0.0f);
-    glVertex3f(0.5f, 0.5f, 0.5f);
-    glTexCoord2f(1.0f, 1.0f);
-    glVertex3f(0.5f, 0.5f, -0.5f);
-    glTexCoord2f(0.0f, 1.0f);
-    glVertex3f(-0.5f, 0.5f, -0.5f);
-    glEnd();
-    glPopMatrix();
-
-    glEndList();
-  }
-
-  glCallList(list);
-}
-
-void drawMirroredRoom() {
-  glPushMatrix();
-  // Render mirrored reflection
-  glTranslatef(-ROOM_WIDTH, 0.0f, 0.0f);
-  glScalef(-1.0f, 1.0f, 1.0f);
-  drawRoom();
-  glPopMatrix();
-}
-
-void drawRoom() {
-  glEnable(GL_BLEND);
-  glEnable(GL_STENCIL_TEST);
-  glDepthMask(GL_FALSE);
-
-  // Render mirror plane into stencil buffer
-  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-  glStencilFunc(GL_ALWAYS, 1, 0);
-  glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
-
-  drawFloor();
-
-  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-  glStencilFunc(GL_EQUAL, 1, 1);
-  glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-
-  glDepthMask(GL_TRUE);
-
-  // Render mirrored reflection model
-  glPushMatrix();
-  glTranslatef(0.0f, -100.0f, 0.0f);
-  glScalef(1.0f, -1.0f, 1.0f);
-  drawModel();
-  glPopMatrix();
-
-  // Render mirror surface
-  drawFloor();
-
-  // Render normal model
-  glDisable(GL_STENCIL_TEST);
-  drawModel();
-  glDisable(GL_BLEND);
-
-  // Render model into depth buffer
-  glEnable(GL_STENCIL_TEST);
-  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-  glStencilFunc(GL_ALWAYS, 1, 0);
-  glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
-  drawModel();
-
-  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-  glDisable(GL_STENCIL_TEST);
-}
-
-void drawPattern() {
-  static const GLubyte stipple[] = {
-      0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00,
-      0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
-      0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF,
-      0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
-      0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00,
-      0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
-
-      0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF,
-      0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
-      0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00,
-      0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
-      0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF,
-      0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
-  };
-
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  gluOrtho2D(-1.0, 1.0, -1.0, 1.0);
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-
-  glEnable(GL_STENCIL_TEST);
-  glStencilFunc(GL_NOTEQUAL, 1, 1);
-  glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-
-  // Draw stipple pattern
-  glEnable(GL_POLYGON_STIPPLE);
-  glPolygonStipple(stipple);
-  glColor3f(1.1f, 1.0f, 1.0f);
-  glRectd(-1.0, -1.0, 1.0, 1.0);
-  glDisable(GL_POLYGON_STIPPLE);
-
-  glDisable(GL_STENCIL_TEST);
-
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  glFrustum(-app.ar, app.ar, -1.0, 1.0, 1.0, 100000.0);
-}
-
-} // anonymous namespace

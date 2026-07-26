@@ -4,18 +4,14 @@
 
 #include "FileHeader.hpp"
 
-#include <GL/freeglut.h>
 #include <GL/gl.h>
-#include <GL/glu.h>
-
-#include <IL/il.h>
-
 #include <glm/glm.hpp>
-#include <spdlog/spdlog.h>
 
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace bgl {
@@ -24,39 +20,46 @@ namespace bgl {
 [[nodiscard]] std::filesystem::path GetAssetPath(const std::filesystem::path &filename);
 
 // Loads texture using DevIL and returns OpenGL texture ID
-[[nodiscard]] GLuint LoadImage(const std::string &name);
+[[nodiscard]] GLuint LoadImage(std::string_view name);
 
 // Renders bitmap font string using FreeGLUT
-void glutBitmapString(void *font, const char *string);
-
-} // namespace bgl
+void glutBitmapString(void *font, std::string_view string);
 
 class MD2 {
 public:
   struct Keyframe {
     std::vector<glm::vec3> vertices;
-    char name[16]{0};
+    std::string name;
   };
 
-  explicit MD2(const std::string &filename);
-  ~MD2() = default;
+  explicit MD2(const std::filesystem::path &filepath);
+  ~MD2() noexcept;
 
-  // Load MD2 model file
-  void load(const std::string &filename);
+  MD2(const MD2 &) = delete;
+  MD2 &operator=(const MD2 &) = delete;
+  MD2(MD2 &&) noexcept = default;
+  MD2 &operator=(MD2 &&) noexcept = default;
 
-  // Start playing animation
+  // Load MD2 model file from filesystem
+  void load(const std::filesystem::path &filepath);
+
+  // Start playing animation sequence by index and FPS rate
   void start(std::size_t animation, std::size_t fps);
 
   // Update and render model animation frame
   void animate();
 
-  // Normalize model vertices to [-1, 1] range
+  // Normalize model vertices to [-1, 1] range around origin
   void normalize();
 
+  [[nodiscard]] std::size_t getKeyframeCount() const noexcept { return _keyframe_count; }
+  [[nodiscard]] std::size_t getVertexCount() const noexcept { return _vertex_count; }
+  [[nodiscard]] std::size_t getTriangleCount() const noexcept { return _triangle_count; }
+
 private:
-  void render(const std::vector<glm::vec3> &vertices) const;
+  void render(std::span<const glm::vec3> vertices) const;
   void createAnimationList();
-  void interpolate(std::vector<glm::vec3> &dest, std::size_t first, std::size_t second, float factor);
+  void interpolate(std::span<glm::vec3> dest, std::size_t first, std::size_t second, float factor) const noexcept;
   void createFrame(std::size_t animation, std::size_t frame, float factor);
   void next() noexcept;
 
@@ -76,5 +79,7 @@ private:
   std::size_t _fps{0};
   bool _started{false};
 };
+
+} // namespace bgl
 
 #endif // MD2_HPP_
